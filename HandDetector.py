@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import time
 
 class HandDetector:
     def __init__(self, hsv_file, width, height):
@@ -13,9 +14,11 @@ class HandDetector:
         self.max_index = 120
 
         self.cog_pt = None
+        self.prev_cog_pt = None
         self.contour_axis_angle = None
         self.finger_tips = []
         self.named_fingers = []
+        self.last_gesture = None
 
         self.hue_lower, self.hue_upper, self.sat_lower, self.sat_upper, self.val_lower, self.val_upper = self.read_hsv_ranges(hsv_file)
         self.width, self.height = width // self.scale, height // self.scale
@@ -46,14 +49,17 @@ class HandDetector:
 
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not contours:
+            self.prev_cog_pt = None
             return
 
         big_contour = max(contours, key=cv2.contourArea)
         if cv2.contourArea(big_contour) < self.smallest_area:
+            self.prev_cog_pt = None
             return
 
         self.extract_contour_info(big_contour, self.scale)
         self.find_finger_tips(big_contour, self.scale)
+        self.detect_swipe_gesture(frame)
 
     def extract_contour_info(self, contour, scale):
         moments = cv2.moments(contour)
@@ -137,6 +143,22 @@ class HandDetector:
         return np.abs(np.degrees(np.arctan2(next_pt[1] - tip[1], next_pt[0] - tip[0]) -
                                  np.arctan2(prev_pt[1] - tip[1], prev_pt[0] - tip[0])))
 
+    def detect_swipe_gesture(self, frame):
+        if self.prev_cog_pt is None:
+            self.prev_cog_pt = self.cog_pt
+            return
+
+        dx = self.cog_pt[0] - self.prev_cog_pt[0]
+        dy = self.cog_pt[1] - self.prev_cog_pt[1]
+
+        if abs(dx) > 50 and abs(dy) < 20:  # Thresholds for detecting a swipe gesture
+            if dx > 0:
+                self.last_gesture = 'Swipe Right'
+            else:
+                self.last_gesture = 'Swipe Left'
+
+        self.prev_cog_pt = self.cog_pt
+
     def draw(self, frame):
         if not self.finger_tips:
             return
@@ -152,3 +174,21 @@ class HandDetector:
 
         # Mostrar el contador de dedos
         cv2.putText(frame, f'Fingers: {finger_count}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+
+        # Ultimo gesto
+        cv2.putText(frame, f'Last Gesture: {self.last_gesture}', (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+        # Identificar poses
+        if finger_count == 0:
+            cv2.putText(frame, 'Fist', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+        elif finger_count == 1:
+            cv2.putText(frame, 'Pointing', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+        elif finger_count == 2:
+            cv2.putText(frame, 'Peace', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+        elif finger_count == 3:
+            cv2.putText(frame, 'Three', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+        elif finger_count == 4:
+            cv2.putText(frame, 'Four', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+        elif finger_count == 5:
+            cv2.putText(frame, 'Palm', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+
+        
