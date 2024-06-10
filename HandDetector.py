@@ -159,11 +159,16 @@ class HandDetector:
 
         self.prev_cog_pt = self.cog_pt
 
-    def detect_like_gesture(self):
-            if len(self.finger_tips) == 1:
-                thumb_tip = self.finger_tips[0]
-                if self.cog_pt and thumb_tip[1] < self.cog_pt[1]:  # Check if the thumb is above the center of gravity
+    def detect_like_dislike_gesture(self):
+        if len(self.finger_tips) == 1:
+            thumb_tip = self.finger_tips[0]
+            if self.cog_pt:
+                if thumb_tip[1] < self.cog_pt[1]:  # Pulgar arriba del CoG
                     self.last_gesture = 'Like'
+                elif thumb_tip[1] > self.cog_pt[1]:  # Pulgar abajo del CoG
+                    self.last_gesture = 'Dislike'
+
+
 
     def draw(self, frame):
         if not self.finger_tips:
@@ -185,8 +190,11 @@ class HandDetector:
         cv2.putText(frame, f'Last Gesture: {self.last_gesture}', (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
         
         # Identificar poses
+        
         if self.last_gesture == 'Like':
             cv2.putText(frame, 'Like', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+        elif self.last_gesture == 'Dislike':
+            cv2.putText(frame, 'Dislike', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
         elif finger_count == 0:
             cv2.putText(frame, 'Fist', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
         elif finger_count == 1:
