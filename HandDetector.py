@@ -1,24 +1,17 @@
 import cv2
 import numpy as np
-import time
 
 class HandDetector:
     def __init__(self, hsv_file, width, height):
         self.scale = 2
-        self.smallest_area = 600.0
+        self.smallest_area = 1000.0
         self.min_finger_depth = 20
         self.max_finger_angle = 60
-        self.min_thumb = 120
-        self.max_thumb = 200
-        self.min_index = 60
-        self.max_index = 120
 
         self.cog_pt = None
-        self.prev_cog_pt = None
         self.contour_axis_angle = None
         self.finger_tips = []
-        self.named_fingers = []
-        self.last_gesture = None
+        self.current_gesture = ""
 
         self.hue_lower, self.hue_upper, self.sat_lower, self.sat_upper, self.val_lower, self.val_upper = self.read_hsv_ranges(hsv_file)
         self.width, self.height = width // self.scale, height // self.scale
@@ -35,13 +28,12 @@ class HandDetector:
         frame_resized = cv2.resize(frame, (self.width, self.height))
         hsv_img = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2HSV)
 
-        # Aplicar filtro Gaussiano
+        # filtro Gaussiano
         hsv_img = cv2.GaussianBlur(hsv_img, (5, 5), 0)
 
         mask = cv2.inRange(hsv_img, (self.hue_lower, self.sat_lower, self.val_lower),
                            (self.hue_upper, self.sat_upper, self.val_upper))
 
-        # Operaciones morfológicas adicionales
         mask = cv2.erode(mask, None, iterations=3)
         mask = cv2.dilate(mask, None, iterations=3)
 
@@ -49,17 +41,17 @@ class HandDetector:
 
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not contours:
-            self.prev_cog_pt = None
+            self.current_gesture = "Piedra"
             return
 
         big_contour = max(contours, key=cv2.contourArea)
         if cv2.contourArea(big_contour) < self.smallest_area:
-            self.prev_cog_pt = None
+            self.current_gesture = "Piedra"
             return
 
         self.extract_contour_info(big_contour, self.scale)
         self.find_finger_tips(big_contour, self.scale)
-        self.detect_swipe_gesture(frame)
+        self.recognize_gesture()
 
     def extract_contour_info(self, contour, scale):
         moments = cv2.moments(contour)
@@ -139,28 +131,33 @@ class HandDetector:
 
             self.finger_tips.append(tip_pts[i])
 
+        # Ordenar las puntas de los dedos de izquierda a derecha
+        self.finger_tips = sorted(self.finger_tips, key=lambda x: x[0])
+
     def angle_between(self, tip, next_pt, prev_pt):
         return np.abs(np.degrees(np.arctan2(next_pt[1] - tip[1], next_pt[0] - tip[0]) -
                                  np.arctan2(prev_pt[1] - tip[1], prev_pt[0] - tip[0])))
 
-    def detect_swipe_gesture(self, frame):
-        if self.prev_cog_pt is None:
-            self.prev_cog_pt = self.cog_pt
-            return
+    def recognize_gesture(self):
+        finger_count = len(self.finger_tips)
 
-        dx = self.cog_pt[0] - self.prev_cog_pt[0]
-        dy = self.cog_pt[1] - self.prev_cog_pt[1]
-
-        if abs(dx) > 50 and abs(dy) < 20:  # Thresholds for detecting a swipe gesture
-            if dx > 0:
-                self.last_gesture = 'Swipe Right'
-            else:
-                self.last_gesture = 'Swipe Left'
-
-        self.prev_cog_pt = self.cog_pt
+        if finger_count == 0:
+            self.current_gesture = "Piedra"
+        elif finger_count == 1:
+            self.current_gesture = "Like"
+        elif finger_count == 2:
+            self.current_gesture = "Tijera"
+        elif finger_count == 3:
+            self.current_gesture = "OK"
+        elif finger_count == 4:
+            self.current_gesture = "Saludo"
+        elif finger_count == 5:
+            self.current_gesture = "Stop"
+        else:
+            self.current_gesture = "Desconocido"
 
     def draw(self, frame):
-        if not self.finger_tips:
+        if not self.finger_tips and self.current_gesture != "Piedra":
             return
 
         # Contador de dedos
@@ -173,22 +170,7 @@ class HandDetector:
         cv2.circle(frame, self.cog_pt, 8, (0, 0, 255), -1)
 
         # Mostrar el contador de dedos
-        cv2.putText(frame, f'Fingers: {finger_count}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+        cv2.putText(frame, f'Dedos: {finger_count}', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
 
-        # Ultimo gesto
-        cv2.putText(frame, f'Last Gesture: {self.last_gesture}', (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
-        # Identificar poses
-        if finger_count == 0:
-            cv2.putText(frame, 'Fist', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
-        elif finger_count == 1:
-            cv2.putText(frame, 'Pointing', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
-        elif finger_count == 2:
-            cv2.putText(frame, 'Peace', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
-        elif finger_count == 3:
-            cv2.putText(frame, 'Three', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
-        elif finger_count == 4:
-            cv2.putText(frame, 'Four', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
-        elif finger_count == 5:
-            cv2.putText(frame, 'Palm', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
-
-        
+        # Mostrar el gesto
+        cv2.putText(frame, f'Gesto: {self.current_gesture}', (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
